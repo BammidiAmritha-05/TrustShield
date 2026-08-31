@@ -1,0 +1,46 @@
+﻿# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Node / frontend
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.vite/
+**/.vite/
+
+# Local generated files
+temp_audio_buffers/
+*.log
+
+# Local media / recordings
+*.mp4
+*.m4a
+*.mpeg
+*.wav
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local backup
+backend_phase5_backup/
+
+# Local frontend checkpoint backup
+frontend/src_checkpoint_backup/
