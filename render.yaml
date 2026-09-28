@@ -2,7 +2,7 @@ services:
   - type: web
     name: trustshield-backend
     runtime: python
-    plan: 1c-2g
+    plan: free
 
     buildCommand: pip install -r backend/requirements.txt
 
