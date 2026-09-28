@@ -26,6 +26,8 @@ export const LiveProtectionPage: React.FC = () => {
     risk,
     claimVerification,
     protection,
+    actionGate,
+    recovery,
     timeline,
     lastError,
     isRecording,
@@ -228,7 +230,11 @@ export const LiveProtectionPage: React.FC = () => {
             onToggleRecording={toggleRecording}
           />
 
-          <ActionGuidance protection={protection} />
+          <ActionGuidance 
+            protection={protection}
+            actionGate={actionGate}
+            recovery={recovery}
+          />
 
           <ConversationSignals signals={signals} />
 

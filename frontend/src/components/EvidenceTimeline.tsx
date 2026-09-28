@@ -16,8 +16,9 @@ export const EvidenceTimeline: React.FC<EvidenceTimelineProps> = ({ timeline }) 
       return riskLevel.replace(/_/g, ' ');
     }
     if (typeof index === 'number') {
-      if (index >= 75) return 'HIGH RISK';
-      if (index >= 40) return 'CAUTION';
+      if (index >= 80) return 'HIGH RISK';
+      if (index >= 60) return 'SUSPICIOUS';
+      if (index >= 30) return 'CAUTION';
       return 'SAFE';
     }
     return 'SAFE';
@@ -34,9 +35,9 @@ export const EvidenceTimeline: React.FC<EvidenceTimelineProps> = ({ timeline }) 
         {timeline.map((turn, index) => {
           const turnNumber = turn.turn_number ?? turn.turn_index ?? index + 1;
           const riskIndex = turn.risk_index ?? turn.temporal_risk ?? turn.instantaneous_risk ?? 0;
-          const resolvedLevel: RiskLevel = turn.risk_level ?? (riskIndex >= 75 ? 'HIGH_RISK' : riskIndex >= 40 ? 'MODERATE_RISK' : 'LOW_RISK');
-          const isHighRisk = resolvedLevel === 'HIGH_RISK' || resolvedLevel === 'CRITICAL_RISK';
-          const isModerate = resolvedLevel === 'MODERATE_RISK';
+          const resolvedLevel: RiskLevel = turn.risk_level ?? (riskIndex >= 80 ? 'HIGH_RISK' : riskIndex >= 60 ? 'SUSPICIOUS' : riskIndex >= 30 ? 'CAUTION' : 'SAFE');
+          const isHighRisk = resolvedLevel === 'HIGH_RISK' || resolvedLevel === 'SUSPICIOUS';
+          const isModerate = resolvedLevel === 'CAUTION';
           const timestampLabel = turn.timestamp ? new Date(turn.timestamp).toLocaleTimeString() : undefined;
 
           return (

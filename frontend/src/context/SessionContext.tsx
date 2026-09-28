@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import {
+  ActionGatePayload,
   ClaimVerificationPayload,
   ErrorPayload,
   InteractionType,
   ProtectionUpdatePayload,
+  RecoveryPayload,
   RiskUpdatePayload,
   SessionResponse,
   SignalUpdatePayload,
@@ -27,6 +29,8 @@ interface SessionContextType {
   protection: ProtectionUpdatePayload | null;
   timeline: TimelineTurn[];
   lastError: ErrorPayload | null;
+  actionGate: ActionGatePayload | null;
+  recovery: RecoveryPayload | null;
   isRecording: boolean;
 
   startNewSession: (type: InteractionType, consent: boolean) => Promise<SessionResponse>;
@@ -55,6 +59,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [timeline, setTimeline] = useState<TimelineTurn[]>([]);
   const [lastError, setLastError] = useState<ErrorPayload | null>(null);
   const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [actionGate, setActionGate] = useState<ActionGatePayload | null>(null);
+  const [recovery, setRecovery] = useState<RecoveryPayload | null>(null);
 
   const wsClientRef = useRef<TrustShieldWebSocketClient | null>(null);
 
@@ -75,6 +81,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setTimeline([]);
     setLastError(null);
     setIsRecording(false);
+    setActionGate(null);
+    setRecovery(null);
   }, []);
 
   const handleServerEvent = useCallback((event: WSServerEvent) => {
@@ -166,6 +174,14 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       case 'SESSION_ENDED':
         setSession((prev) => (prev ? { ...prev, status: 'ended' } : null));
         setConnectionStatus('disconnected');
+        break;
+
+      case 'ACTION_GATE':
+        setActionGate(event.payload);
+        break;
+
+      case 'RECOVERY':
+        setRecovery(event.payload);
         break;
 
       default:
@@ -268,6 +284,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         risk,
         claimVerification,
         protection,
+        actionGate,
+        recovery,
         timeline,
         lastError,
         isRecording,

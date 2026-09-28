@@ -28,9 +28,10 @@ class RiskEngine:
         self.temporal_engine = temporal_engine or TemporalEngine()
 
     def evaluate_turn(
-        self,
+    self,
         conversation_analysis: Optional[Dict[str, Any]] = None,
         voice_analysis: Optional[Dict[str, Any]] = None,
+        claim_verification: Optional[Dict[str, Any]] = None,
         session_context: Optional[Dict[str, Any]] = None,
         turn_index: int = 1
     ) -> Dict[str, Any]:
@@ -51,6 +52,9 @@ class RiskEngine:
             turn_evidence.extend(self.accumulator.ingest_voice_result(voice_analysis, turn_index=turn_index))
         if conversation_analysis:
             turn_evidence.extend(self.accumulator.ingest_conversation_result(conversation_analysis, turn_index=turn_index))
+
+        if claim_verification:
+            turn_evidence.extend(self.accumulator.ingest_claim_verification_result(claim_verification, turn_index=turn_index))
 
         all_evidence = self.accumulator.get_latest_evidence()
 
@@ -122,7 +126,43 @@ class RiskEngine:
                 "source": "IMPERSONATION"
             })
 
-        # D. Voice Authenticity Score (if available)
+        # D. Official Claim Verification Score
+        verification_items = [
+            item for item in all_evidence
+            if item.signal == "claim_verification_status"]
+
+        if verification_items:
+            verification_status = verification_items[-1].value
+            verification_confidence = verification_items[-1].confidence
+
+            if verification_status == "CONTRADICTED":
+                pts = 25.0 * verification_confidence
+                raw_score += pts
+
+                contributing_signals.append({
+                    "signal": "claim_verification_contradicted",
+                    "value": verification_status,
+                    "points": round(pts, 2),
+                    "source": "CLAIM_VERIFICATION"
+                })
+
+            elif verification_status == "NOT_VERIFIED":
+                contributing_signals.append({
+                    "signal": "claim_verification_unverified",
+                    "value": verification_status,
+                    "points": 0.0,
+                    "source": "CLAIM_VERIFICATION"
+                })
+
+            elif verification_status == "VERIFIED":
+                contributing_signals.append({
+                    "signal": "claim_verification_verified",
+                    "value": verification_status,
+                    "points": 0.0,
+                    "source": "CLAIM_VERIFICATION"
+                })
+
+        # E. Voice Authenticity Score (if available)
         voice_pts = 0.0
         if voice_analysis and voice_analysis.get("status") == "available":
             synth_score = voice_analysis.get("synthetic_score", 0.0)
@@ -136,7 +176,7 @@ class RiskEngine:
                     "source": "VOICE_MODEL"
                 })
 
-        # E. Context Modifiers (Trusted Relationship / Low Risk Action Reductions)
+        # F. Context Modifiers (Trusted Relationship / Low Risk Action Reductions)
         if identity_verified and act_sens in ["none", "low"]:
             raw_score = max(0.0, raw_score - 30.0)
 

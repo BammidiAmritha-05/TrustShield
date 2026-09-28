@@ -34,10 +34,13 @@ from app.models import (
     VoiceAuthenticityFailedError,
     VoiceAuthenticityUnavailableError,
 )
+from app.services.action_gate_service import ActionGateService, default_action_gate_service
 from app.services.audio_buffer_service import AudioBufferService, default_audio_buffer_service
 from app.services.audio_decoder_service import AudioDecoderService, default_audio_decoder_service
 from app.services.evidence_store import default_evidence_store
+from app.services.recovery_service import RecoveryService, default_recovery_service
 from app.services.session_service import SessionService, default_session_service
+
 
 logger = logging.getLogger("trustshield-backend.websocket")
 
@@ -67,6 +70,8 @@ async def session_websocket_stream(
     conversation_adapter: AIConversationAdapter = Depends(lambda: default_conversation_adapter),
     risk_adapter: AIRiskAdapter = Depends(lambda: default_risk_adapter),
     protection_adapter: AIProtectionAdapter = Depends(lambda: default_protection_adapter),
+    action_gate_service: ActionGateService = Depends(lambda: default_action_gate_service),
+    recovery_service: RecoveryService = Depends(lambda: default_recovery_service),
     claim_adapter: AIClaimVerificationAdapter = Depends(lambda: default_claim_adapter)
 ):
     # 1. Pre-connection session validation
@@ -179,32 +184,8 @@ async def session_websocket_stream(
                     except Exception as e:
                         logger.error(f"Unexpected error in conversation pipeline for text session {session_id}: {e}", exc_info=True)
 
-                    # 2. Run Risk Engine Evaluation
-                    risk_res = None
-                    try:
-                        risk_res = await asyncio.to_thread(
-                            risk_adapter.evaluate_session_turn,
-                            session_id,
-                            conversation_analysis=conv_res
-                        )
-                        await websocket.send_json(make_ws_event("RISK_UPDATE", session_id, risk_res))
-                        session_service.record_event_metadata(session_id, "RISK_UPDATE", risk_res)
-                    except RiskEngineUnavailableError as e:
-                        await websocket.send_json(make_ws_event("RISK_UPDATE", session_id, {
-                            "status": "unavailable",
-                            "reason": "risk_engine_unavailable",
-                            "message": str(e)
-                        }))
-                    except RiskEngineFailedError as e:
-                        await websocket.send_json(make_ws_event("RISK_UPDATE", session_id, {
-                            "status": "error",
-                            "reason": "risk_evaluation_failed",
-                            "message": str(e)
-                        }))
-                    except Exception as e:
-                        logger.error(f"Unexpected error in Risk Engine for text session {session_id}: {e}", exc_info=True)
-
-                    # 3. Run Claim Verification Pipeline
+                    # 2. Run Claim Verification Pipeline
+                    claim_res = None
                     try:
                         claim_res = await asyncio.to_thread(
                             claim_adapter.verify_claim,
@@ -227,7 +208,34 @@ async def session_websocket_stream(
                     except Exception as e:
                         logger.error(f"Unexpected error in Claim Verification for text session {session_id}: {e}", exc_info=True)
 
+                    # 3. Run Risk Engine Evaluation
+                    risk_res = None
+                    try:
+                        risk_res = await asyncio.to_thread(
+                            risk_adapter.evaluate_session_turn,
+                            session_id,
+                            conversation_analysis=conv_res,
+                            claim_verification=claim_res
+                        )
+                        await websocket.send_json(make_ws_event("RISK_UPDATE", session_id, risk_res))
+                        session_service.record_event_metadata(session_id, "RISK_UPDATE", risk_res)
+                    except RiskEngineUnavailableError as e:
+                        await websocket.send_json(make_ws_event("RISK_UPDATE", session_id, {
+                            "status": "unavailable",
+                            "reason": "risk_engine_unavailable",
+                            "message": str(e)
+                        }))
+                    except RiskEngineFailedError as e:
+                        await websocket.send_json(make_ws_event("RISK_UPDATE", session_id, {
+                            "status": "error",
+                            "reason": "risk_evaluation_failed",
+                            "message": str(e)
+                        }))
+                    except Exception as e:
+                        logger.error(f"Unexpected error in Risk Engine for text session {session_id}: {e}", exc_info=True)
+
                     # 4. Run Protection Agent Guidance
+                    prot_res = None
                     if risk_res and risk_res.get("status") == "available":
                         try:
                             prot_res = await asyncio.to_thread(
@@ -252,6 +260,64 @@ async def session_websocket_stream(
                         except Exception as e:
                             logger.error(f"Unexpected error in Protection Agent for text session {session_id}: {e}", exc_info=True)
 
+                    # 5. Action Gate
+                    gate_res = None
+                    try:
+                        gate_res = await asyncio.to_thread(
+                            action_gate_service.evaluate,
+                            risk_res,
+                            prot_res,
+                        )
+
+                        await websocket.send_json(
+                            make_ws_event(
+                                "ACTION_GATE",
+                                session_id,
+                                gate_res,
+                            )
+                        )
+
+                        session_service.record_event_metadata(
+                            session_id,
+                            "ACTION_GATE",
+                            gate_res,
+                        )
+
+                    except Exception as e:
+                        logger.error(
+                            "Unexpected error in Action Gate "
+                            f"for text session {session_id}: {e}",
+                            exc_info=True,
+                        )
+
+                    # 6. Recovery Guidance
+                    if gate_res is not None:
+                        try:
+                            recovery_res = await asyncio.to_thread(
+                                recovery_service.generate_recovery_guidance,
+                                risk_res or {},
+                                prot_res or {},
+                                gate_res, conv_res,
+                            )
+                            await websocket.send_json(
+                                make_ws_event(
+                                    "RECOVERY",
+                                    session_id,
+                                    recovery_res,
+                                )
+                            )
+                            session_service.record_event_metadata(
+                                session_id,
+                                "RECOVERY",
+                                recovery_res,
+                            )
+
+                        except Exception as e:
+                            logger.error(
+                                "Unexpected error in Recovery Service "
+                                f"for text session {session_id}: {e}",
+                                exc_info=True,
+                            )
                 elif action == "flush_utterance":
                     # Finalize current spoken utterance
                     full_buffer_bytes = audio_buffer_service.get_buffer(session_id)
@@ -267,6 +333,8 @@ async def session_websocket_stream(
                                 )
                                 text = transcribe_res.get("text", "").strip()
                                 conv_res = None
+                                prot_res = None
+                                gate_res = None
                                 if text:
                                     final_payload = {
                                         "text": text,
@@ -289,17 +357,9 @@ async def session_websocket_stream(
                                     decoded.sample_rate
                                 )
 
-                                # Advance turn index for completed spoken utterance
-                                risk_res = await asyncio.to_thread(
-                                    risk_adapter.evaluate_session_turn,
-                                    session_id,
-                                    conversation_analysis=conv_res,
-                                    voice_analysis=voice_res,
-                                    advance_turn=True
-                                )
-                                await websocket.send_json(make_ws_event("RISK_UPDATE", session_id, risk_res))
-                                session_service.record_event_metadata(session_id, "RISK_UPDATE", risk_res)
+                                # Claim verification
 
+                                claim_res = None
                                 if text:
                                     claim_res = await asyncio.to_thread(
                                         claim_adapter.verify_claim,
@@ -307,6 +367,17 @@ async def session_websocket_stream(
                                     )
                                     await websocket.send_json(make_ws_event("CLAIM_VERIFICATION", session_id, claim_res))
                                     session_service.record_event_metadata(session_id, "CLAIM_VERIFICATION", claim_res)
+                                #Advance turn index for completed spoken utterance
+                                risk_res = await asyncio.to_thread(
+                                    risk_adapter.evaluate_session_turn,
+                                    session_id,
+                                    conversation_analysis=conv_res,
+                                    voice_analysis=voice_res,
+                                    claim_verification=claim_res,
+                                    advance_turn=True
+                                )
+                                await websocket.send_json(make_ws_event("RISK_UPDATE", session_id, risk_res))
+                                session_service.record_event_metadata(session_id, "RISK_UPDATE", risk_res)
 
                                 if risk_res and risk_res.get("status") == "available":
                                     prot_res = await asyncio.to_thread(
@@ -316,6 +387,47 @@ async def session_websocket_stream(
                                     )
                                     await websocket.send_json(make_ws_event("PROTECTION_UPDATE", session_id, prot_res))
                                     session_service.record_event_metadata(session_id, "PROTECTION_UPDATE", prot_res)
+                                    gate_res = await asyncio.to_thread(
+                                        action_gate_service.evaluate,
+                                        risk_res or {},
+                                        prot_res or {},
+                                    )
+
+                                    await websocket.send_json(
+                                        make_ws_event(
+                                            "ACTION_GATE",
+                                            session_id,
+                                            gate_res,
+                                        )
+                                    )
+
+                                    session_service.record_event_metadata(
+                                        session_id,
+                                        "ACTION_GATE",
+                                        gate_res,
+                                    )
+
+                                    recovery_res = await asyncio.to_thread(
+                                        recovery_service.generate_recovery_guidance,
+                                        risk_res,
+                                        prot_res,
+                                        gate_res,
+                                        conv_res,
+                                    )
+
+                                    await websocket.send_json(
+                                        make_ws_event(
+                                            "RECOVERY",
+                                            session_id,
+                                            recovery_res,
+                                        )
+                                    )
+
+                                    session_service.record_event_metadata(
+                                        session_id,
+                                        "RECOVERY",
+                                        recovery_res,
+                                    )
                         except Exception as e:
                             logger.error(f"Error finalizing utterance for session {session_id}: {e}", exc_info=True)
 
@@ -411,7 +523,10 @@ async def session_websocket_stream(
                     final_transcript_text = ""
                     conv_res = None
                     voice_res = None
+                    claim_res = None
                     risk_res = None
+                    prot_res = None
+                    gate_res = None
 
                     # 5.3.1 Whisper Transcription Pipeline
                     try:
@@ -543,7 +658,37 @@ async def session_websocket_stream(
                         except Exception as e:
                             logger.error(f"Unexpected error in Claim Verification for voice session {session_id}: {e}", exc_info=True)
 
-                    # 5.3.6 Protection Agent Guidance Pipeline
+                    # 5.3.6 Multi-Modal Hybrid Risk Engine Pipeline
+                    try:
+                        risk_res = await asyncio.to_thread(
+                            risk_adapter.evaluate_session_turn,
+                            session_id,
+                            conversation_analysis=conv_res,
+                            voice_analysis=voice_res,
+                            claim_verification=claim_res,
+                            advance_turn=False
+                        )
+                        await websocket.send_json(make_ws_event("RISK_UPDATE", session_id, risk_res))
+                        session_service.record_event_metadata(session_id, "RISK_UPDATE", risk_res)
+                    except RiskEngineUnavailableError as e:
+                        await websocket.send_json(make_ws_event("RISK_UPDATE", session_id, {
+                            "status": "unavailable",
+                            "reason": "risk_engine_unavailable",
+                            "message": str(e)
+                        }))
+                    except RiskEngineFailedError as e:
+                        await websocket.send_json(make_ws_event("RISK_UPDATE", session_id, {
+                            "status": "error",
+                            "reason": "risk_evaluation_failed",
+                            "message": str(e)
+                        }))
+                    except Exception as e:
+                        logger.error(
+                            f"Unexpected error in Risk Engine pipeline for session {session_id}: {e}",
+                            exc_info=True
+                        )
+
+                    # 5.3.7 Protection Agent Guidance Pipeline
                     if risk_res and risk_res.get("status") == "available":
                         try:
                             prot_res = await asyncio.to_thread(
@@ -567,6 +712,68 @@ async def session_websocket_stream(
                             }))
                         except Exception as e:
                             logger.error(f"Unexpected error in Protection Agent pipeline for session {session_id}: {e}", exc_info=True)
+
+                    # 5.3.8 Action Gate
+                    try:
+                        gate_res = await asyncio.to_thread(
+                                action_gate_service.evaluate,
+                                risk_res or {},
+                                prot_res or {},
+                            )
+
+                        await websocket.send_json(
+                            make_ws_event(
+                                "ACTION_GATE",
+                                session_id,
+                                gate_res,
+                            )
+                        )
+
+                        session_service.record_event_metadata(
+                            session_id,
+                            "ACTION_GATE",
+                            gate_res,
+                        )
+
+                    except Exception as e:
+                        logger.error(
+                            "Unexpected error in Action Gate "
+                            f"pipeline for session {session_id}: {e}",
+                            exc_info=True,
+                        )
+
+                    # 5.3.9 Recovery Guidance
+                    if gate_res is not None:
+                        try:
+                            recovery_res = await asyncio.to_thread(
+                                recovery_service.generate_recovery_guidance,
+                                risk_res or {},
+                                prot_res or {},
+                                gate_res,
+                                conv_res,
+                            )
+
+                            await websocket.send_json(
+                                make_ws_event(
+                                    "RECOVERY",
+                                    session_id,
+                                    recovery_res,
+                                )
+                            )
+
+                            session_service.record_event_metadata(
+                                session_id,
+                                "RECOVERY",
+                                recovery_res,
+                            )
+
+                        except Exception as e:
+                            logger.error(
+                                "Unexpected error in Recovery Service "
+                                f"pipeline for session {session_id}: {e}",
+                                exc_info=True,
+                            )
+
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected cleanly for session {session_id}")

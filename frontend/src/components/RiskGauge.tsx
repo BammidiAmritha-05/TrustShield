@@ -28,13 +28,13 @@ export const RiskGauge: React.FC<RiskGaugeProps> = ({ risk }) => {
   const getRiskBadgeColor = (lvl: string) => {
     switch (lvl) {
       case 'HIGH_RISK':
-      case 'CRITICAL_RISK':
+      case 'SUSPICIOUS':
         return 'bg-rose-500/20 text-rose-300 border-rose-500/40';
-      case 'MODERATE_RISK':
+      case 'CAUTION':
         return 'bg-amber-500/20 text-amber-300 border-amber-500/40';
       case 'UNCERTAIN':
         return 'bg-slate-800 text-slate-300 border-slate-700';
-      case 'LOW_RISK':
+      case 'SAFE':
       default:
         return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
     }
@@ -65,16 +65,16 @@ export const RiskGauge: React.FC<RiskGaugeProps> = ({ risk }) => {
         <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700">
           <div
             className={`h-full rounded-full transition-all duration-500 ${
-              score >= 55 ? 'bg-rose-500' : score >= 25 ? 'bg-amber-500' : 'bg-emerald-500'
+              score >= 80 ? 'bg-rose-500' : score >= 60 ? 'bg-amber-500' : score >= 30 ? 'bg-yellow-500' : 'bg-emerald-500'
             }`}
             style={{ width: `${Math.min(score, 100)}%` }}
           />
         </div>
         <div className="flex justify-between text-[10px] text-slate-500 mt-1 font-mono">
           <span>0 (SAFE)</span>
-          <span>25 (MODERATE)</span>
-          <span>55 (HIGH)</span>
-          <span>80 (CRITICAL)</span>
+          <span>30 (CAUTION)</span>
+          <span>60 (SUSPICIOUS)</span>
+          <span>80 (HIGH)</span>
         </div>
       </div>
 

@@ -130,6 +130,66 @@ class EvidenceAccumulator:
             ev_items.append(item)
 
         return ev_items
+    def ingest_claim_verification_result(self, verification_res: Dict[str, Any], turn_index: Optional[int] = None) -> List[NormalizedEvidence]:
+        """Converts Official Claim Verification output into normalized evidence."""
+        turn = turn_index if turn_index is not None else self.current_turn
+        ev_items = []
+
+        if not verification_res:
+            return ev_items
+
+        verification = verification_res.get("verification", {})
+        overall_status = verification.get("overall_status")
+        overall_confidence = verification.get("confidence", 0.0)
+
+        if overall_status:
+            item = NormalizedEvidence(
+                signal="claim_verification_status",
+                value=overall_status,
+                confidence=overall_confidence,
+                source=EvidenceSource.CLAIM_VERIFICATION.value,
+                turn_index=turn
+            )
+            self.add_evidence(item)
+            ev_items.append(item)
+
+        action = verification_res.get("action", {})
+        action_status = action.get("status")
+        action_type = action.get("type")
+
+        if action_status and action_status != "NONE":
+            item = NormalizedEvidence(
+                signal="verified_action_status",
+                value={
+                    "action": action_type,
+                    "status": action_status
+                },
+                confidence=overall_confidence,
+                source=EvidenceSource.CLAIM_VERIFICATION.value,
+                turn_index=turn
+            )
+            self.add_evidence(item)
+            ev_items.append(item)
+
+        for claim in verification_res.get("claims", []):
+            claim_status = claim.get("status")
+            claim_confidence = claim.get("confidence", 0.0)
+
+            if claim_status:
+                item = NormalizedEvidence(
+                    signal="verified_claim_status",
+                    value={
+                        "status": claim_status,
+                        "text": claim.get("text", "")
+                    },
+                    confidence=claim_confidence,
+                    source=EvidenceSource.CLAIM_VERIFICATION.value,
+                    turn_index=turn
+                )
+                self.add_evidence(item)
+                ev_items.append(item)
+
+        return ev_items
 
     def get_latest_evidence(self) -> List[NormalizedEvidence]:
         """Returns all evidence accumulated so far."""

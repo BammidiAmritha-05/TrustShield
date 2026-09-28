@@ -42,7 +42,7 @@ Phase 5.6B completes the comprehensive security, provenance, and fail-safe audit
     {
       "url": "https://rythubandhu.telangana.gov.in",
       "authority": "Telangana Rythu Bandhu Portal (Department of Agriculture, Government of Telangana)",
-      "retrieved_at": "2026-08-30T09:00:19Z",
+      "retrieved_at": "2026-09-26T10:51:46Z",
       "relevance": "Official policy summary: Agricultural investment support is directly deposited into registered farmers' accounts via treasury DBT. Officials do not request OTP disclosure or phone fees.",
       "tier": "TIER_1",
       "source_type": "STATIC_OFFICIAL_SOURCE",

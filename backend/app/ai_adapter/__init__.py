@@ -1,6 +1,8 @@
+from pathlib import Path
 import os
 import sys
 import logging
+
 from app.config import settings
 
 logger = logging.getLogger("trustshield-backend.ai_adapter")
@@ -8,25 +10,52 @@ logger = logging.getLogger("trustshield-backend.ai_adapter")
 
 def bootstrap_ai_root() -> bool:
     """
-    Centrally configures sys.path so the backend can import the existing TrustShield AI package.
-    Uses settings.TRUSTSHIELD_AI_ROOT without hardcoding machine-specific absolute paths.
+    Configure sys.path for the TrustShield AI package.
+
+    Behavior:
+    - If TRUSTSHIELD_AI_ROOT is explicitly configured, use it.
+    - If it is unset (None), automatically discover the repository's ai/ folder.
+    - If it is explicitly empty or points to a missing directory, report unavailable.
     """
-    ai_root = settings.TRUSTSHIELD_AI_ROOT or os.getenv("TRUSTSHIELD_AI_ROOT", "")
-    if not ai_root:
-        logger.warning("TRUSTSHIELD_AI_ROOT is not configured.")
-        return False
+    configured_root = settings.TRUSTSHIELD_AI_ROOT
 
-    ai_root_path = os.path.abspath(ai_root)
-    if not os.path.exists(ai_root_path):
-        logger.warning(f"TRUSTSHIELD_AI_ROOT directory does not exist: {ai_root_path}")
-        return False
+    # Explicitly configured path.
+    if configured_root is not None:
+        if not configured_root.strip():
+            logger.warning("TRUSTSHIELD_AI_ROOT is explicitly empty.")
+            return False
 
-    # The AI package is inside D:\TrustShield\ai (or parent D:\TrustShield for `import ai`)
-    parent_dir = os.path.dirname(ai_root_path)
+        ai_root_path = Path(configured_root).expanduser().resolve()
 
-    for path in [parent_dir, ai_root_path]:
-        if path and os.path.exists(path) and path not in sys.path:
-            sys.path.insert(0, path)
-            logger.info(f"Added {path} to sys.path for AI module imports.")
+        if not ai_root_path.is_dir():
+            logger.warning(
+                "TRUSTSHIELD_AI_ROOT directory does not exist: %s",
+                ai_root_path,
+            )
+            return False
+
+    # No configured path: discover the repository-level ai/ directory.
+    else:
+        # __file__:
+        # <repo>/backend/app/ai_adapter/__init__.py
+        repo_root = Path(__file__).resolve().parents[3]
+        ai_root_path = repo_root / "ai"
+
+        if not ai_root_path.is_dir():
+            logger.warning(
+                "Auto-discovered AI directory does not exist: %s",
+                ai_root_path,
+            )
+            return False
+
+        logger.info("Auto-discovered TrustShield AI root: %s", ai_root_path)
+
+    parent_dir = ai_root_path.parent
+
+    for path in (parent_dir, ai_root_path):
+        path_str = os.fspath(path)
+        if path_str not in sys.path:
+            sys.path.insert(0, path_str)
+            logger.info("Added %s to sys.path for AI module imports.", path)
 
     return True

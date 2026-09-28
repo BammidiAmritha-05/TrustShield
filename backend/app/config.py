@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     HOST: str = "127.0.0.1"
     PORT: int = 8000
     LOG_LEVEL: str = "INFO"
-    TRUSTSHIELD_AI_ROOT: Optional[str] = "D:\\TrustShield\\ai"
+    TRUSTSHIELD_AI_ROOT: Optional[str] = None
     CORS_ORIGINS: Union[List[str], str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     MAX_WS_MESSAGE_BYTES: int = 1_048_576      # 1 MB default
     MAX_WS_TEXT_LENGTH: int = 10_000          # 10,000 chars default

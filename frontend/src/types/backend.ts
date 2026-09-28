@@ -26,7 +26,7 @@ export interface HealthResponse {
   };
 }
 
-export type ProtectionLevel = 'SAFE' | 'CAUTION' | 'HIGH_RISK' | 'STOP_AND_VERIFY' | 'UNCERTAIN';
+export type ProtectionLevel = 'SAFE' | 'CAUTION' | 'SUSPICIOUS' | 'HIGH_RISK' | 'UNCERTAIN';
 export type RecommendedAction =
   | 'NO_ACTION_REQUIRED'
   | 'PAUSE_AND_VERIFY'
@@ -36,10 +36,43 @@ export type RecommendedAction =
   | 'VERIFY_INDEPENDENTLY'
   | 'STAY_AWARE';
 
+export type ActionGateDecision =
+  | 'ALLOW'
+  | 'WARN'
+  | 'PAUSE_AND_VERIFY'
+  | 'BLOCK_AND_VERIFY'
+  | 'HOLD_FOR_VERIFICATION';
+
+export interface ActionGatePayload {
+  status: string;
+  gate_decision: ActionGateDecision;
+  can_proceed: boolean;
+  requires_verification: boolean;
+  protection_level?: ProtectionLevel;
+  recommended_action?: string | null;
+  user_confirmation_required?: boolean;
+  reason?: string;
+  message?: string;
+}
+
+export interface RecoveryPayload {
+  status: string;
+  recovery_required: boolean;
+  severity: string;
+  title: string;
+  action_type: string;
+  protection_level: ProtectionLevel;
+  gate_decision: ActionGateDecision;
+  steps: string[];
+  external_action_taken: boolean;
+  loss_reversed: boolean;
+  evidence_preservation_recommended: boolean;
+}
+
 export interface ProtectionUpdatePayload {
   status: string;
   protection_level?: ProtectionLevel;
-  recommended_action?: RecommendedAction;
+  recommended_action?: string;
   verification_method?: string;
   why?: string;
   do?: string;
@@ -53,7 +86,7 @@ export interface ProtectionUpdatePayload {
   message?: string;
 }
 
-export type RiskLevel = 'LOW_RISK' | 'MODERATE_RISK' | 'HIGH_RISK' | 'CRITICAL_RISK' | 'UNCERTAIN';
+export type RiskLevel = 'SAFE' | 'CAUTION' | 'SUSPICIOUS' | 'HIGH_RISK' | 'UNCERTAIN';
 
 export interface SignalContribution {
   signal?: string;
@@ -111,16 +144,16 @@ export interface SignalUpdatePayload {
     confidence: number;
   };
   manipulation?: {
-    urgency: boolean;
-    secrecy: boolean;
-    fear: boolean;
-    authority_pressure: boolean;
-    emotional_pressure: boolean;
-    threat: boolean;
-    reward: boolean;
-    isolation: boolean;
-    intimidation: boolean;
-    forced_compliance: boolean;
+    urgency: number;
+    secrecy: number;
+    fear: number;
+    authority_pressure: number;
+    emotional_pressure: number;
+    threat: number;
+    reward: number;
+    isolation: number;
+    intimidation: number;
+    forced_compliance: number;
   };
   impersonation?: {
     claimed_identity: string;

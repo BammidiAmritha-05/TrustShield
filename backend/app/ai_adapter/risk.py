@@ -64,6 +64,7 @@ class AIRiskAdapter:
         session_id: str,
         conversation_analysis: Optional[Dict[str, Any]] = None,
         voice_analysis: Optional[Dict[str, Any]] = None,
+        claim_verification: Optional[Dict[str, Any]] = None,
         session_context: Optional[Dict[str, Any]] = None,
         advance_turn: bool = True,
         evidence_store: SessionEvidenceStore = default_evidence_store
@@ -83,6 +84,7 @@ class AIRiskAdapter:
             risk_result = engine.evaluate_turn(
                 conversation_analysis=conversation_analysis,
                 voice_analysis=voice_analysis,
+                claim_verification=claim_verification,
                 session_context=session_context,
                 turn_index=turn_idx
             )

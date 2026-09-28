@@ -53,6 +53,13 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         }
     )
 
+@app.get("/healthz", status_code=status.HTTP_200_OK)
+async def liveness_check():
+    return {
+        "status": "ok",
+        "service": "trustshield-backend",
+        "version": app.version,
+    }
 
 @app.get("/health", status_code=status.HTTP_200_OK)
 async def health_check():

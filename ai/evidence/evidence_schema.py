@@ -17,6 +17,7 @@ class EvidenceSource(str, Enum):
     MANIPULATION = "MANIPULATION"
     IMPERSONATION = "IMPERSONATION"
     CONTEXT = "CONTEXT"
+    CLAIM_VERIFICATION = "CLAIM_VERIFICATION"
     RULE = "RULE"
 
 
@@ -29,9 +30,9 @@ SOURCE_RELIABILITY: Dict[str, float] = {
     EvidenceSource.MANIPULATION.value: 0.88,
     EvidenceSource.IMPERSONATION.value: 0.85,
     EvidenceSource.CONTEXT.value: 0.90,
+    EvidenceSource.CLAIM_VERIFICATION.value: 0.95,
     EvidenceSource.RULE.value: 0.95,
 }
-
 
 @dataclass
 class NormalizedEvidence:

@@ -1,12 +1,24 @@
 import React from 'react';
-import { ProtectionLevel, ProtectionUpdatePayload } from '../types/backend';
-import { ShieldCheck, AlertTriangle, ShieldAlert, AlertOctagon, HelpCircle } from 'lucide-react';
+import {
+  ProtectionLevel,
+  ProtectionUpdatePayload,
+  ActionGateDecision,
+  ActionGatePayload,
+  RecoveryPayload,
+} from '../types/backend';
+import { ShieldCheck, AlertTriangle, ShieldAlert, AlertOctagon, HelpCircle, Flag } from 'lucide-react';
 
 interface ProtectionBannerProps {
   protection: ProtectionUpdatePayload | null;
+  actionGate?: ActionGatePayload | null;
+  recovery?: RecoveryPayload | null;
 }
 
-export const ProtectionBanner: React.FC<ProtectionBannerProps> = ({ protection }) => {
+export const ProtectionBanner: React.FC<ProtectionBannerProps> = ({
+  protection,
+  actionGate,
+  recovery,
+}) => {
   if (!protection || protection.status !== 'available') {
     return (
       <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 flex items-center gap-4 text-slate-400">
@@ -26,7 +38,7 @@ export const ProtectionBanner: React.FC<ProtectionBannerProps> = ({ protection }
   const getStyle = (lvl: ProtectionLevel) => {
     switch (lvl) {
       case 'HIGH_RISK':
-      case 'STOP_AND_VERIFY':
+      case 'SUSPICIOUS':
         return {
           bg: 'bg-rose-950/80 border-rose-600/60 text-rose-100',
           badge: 'bg-rose-600 text-white',
@@ -50,6 +62,46 @@ export const ProtectionBanner: React.FC<ProtectionBannerProps> = ({ protection }
           bg: 'bg-emerald-950/80 border-emerald-600/60 text-emerald-100',
           badge: 'bg-emerald-600 text-white',
           icon: <ShieldCheck className="w-9 h-9 text-emerald-400 flex-shrink-0" />,
+        };
+    }
+  };
+
+  const getActionGateStyle = (gate: ActionGateDecision) => {
+    switch (gate) {
+      case 'BLOCK_AND_VERIFY':
+        return {
+          bg: 'bg-rose-950/50 border-rose-500/40',
+          text: 'text-rose-100',
+          icon: <Flag className="w-6 h-6 text-rose-400" />,
+        };
+
+      case 'PAUSE_AND_VERIFY':
+        return {
+          bg: 'bg-amber-950/50 border-amber-500/40',
+          text: 'text-amber-100',
+          icon: <AlertTriangle className="w-6 h-6 text-amber-400" />,
+        };
+
+      case 'HOLD_FOR_VERIFICATION':
+        return {
+          bg: 'bg-sky-950/50 border-sky-500/40',
+          text: 'text-sky-100',
+          icon: <ShieldCheck className="w-6 h-6 text-sky-400" />,
+        };
+
+      case 'WARN':
+        return {
+          bg: 'bg-yellow-950/50 border-yellow-500/40',
+          text: 'text-yellow-100',
+          icon: <AlertTriangle className="w-6 h-6 text-yellow-400" />,
+        };
+
+      case 'ALLOW':
+      default:
+        return {
+          bg: 'bg-emerald-950/50 border-emerald-500/40',
+          text: 'text-emerald-100',
+          icon: <ShieldCheck className="w-6 h-6 text-emerald-400" />,
         };
     }
   };
@@ -116,6 +168,101 @@ export const ProtectionBanner: React.FC<ProtectionBannerProps> = ({ protection }
           </div>
         )}
       </div>
+
+      {/* Action Gate Section */}
+      {actionGate && actionGate.status === 'available' && (
+        <div className="mt-4 pt-4 border-t border-white/10">
+          <div
+            className={`border rounded-xl p-4 ${
+              getActionGateStyle(actionGate.gate_decision).bg
+            }`}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              {getActionGateStyle(actionGate.gate_decision).icon}
+
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                  ACTION GATE
+                </span>
+
+                <span
+                  className={`text-lg font-bold ${
+                    getActionGateStyle(actionGate.gate_decision).text
+                  }`}
+                >
+                  {actionGate.gate_decision.replace(/_/g, ' ')}
+                </span>
+              </div>
+            </div>
+
+            {actionGate.recommended_action && (
+              <div className="mt-3 text-sm">
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+                  RECOMMENDED ACTION
+                </span>
+
+                <p className={getActionGateStyle(actionGate.gate_decision).text}>
+                  {actionGate.recommended_action.replace(/_/g, ' ')}
+                </p>
+              </div>
+            )}
+
+            {actionGate.reason && (
+              <div className="mt-3 text-sm">
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+                  REASON
+                </span>
+
+                <p className="text-slate-200">
+                  {actionGate.reason}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Recovery Section */}
+      {recovery && recovery.status === 'available' && recovery.recovery_required && (
+        <div className="mt-4 pt-4 border-t border-white/10">
+          <div className="border rounded-xl p-4 bg-slate-950/50 border-slate-600/40">
+            <div className="mb-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                RECOVERY GUIDANCE
+              </span>
+
+              <h3 className="text-lg font-bold text-white">
+                {recovery.title}
+              </h3>
+
+              <p className="text-sm text-slate-400 mt-1">
+                Severity: {recovery.severity}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              {recovery.steps.map((step, index) => (
+                <div key={index} className="flex gap-3 text-sm">
+                  <span className="text-slate-400 font-semibold">
+                    {index + 1}.
+                  </span>
+
+                  <p className="text-slate-200">
+                    {step}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {!recovery.external_action_taken && (
+              <p className="text-xs text-slate-400 mt-4">
+                TrustShield has not taken any external recovery action.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
